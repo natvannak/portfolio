@@ -1,58 +1,86 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# IT Lecturer Portfolio → Laravel (multi-user, admin CRUD)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Your static `index.html / style.css / script.js` converted into a Laravel 11/12 app.
+Same design, but every text, card, project, skill… now comes from the database,
+and every user gets their own portfolio at `/{username}`.
 
-## About Laravel
+> This package contains **only the code that is specific to your app**
+> (models, controllers, views, migrations, routes, CSS/JS). Laravel itself
+> (`vendor/`, `artisan`, …) is downloaded by Composer in the install step.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requirements
+PHP 8.2+, Composer, and the usual Laravel extensions (SQLite is the default DB; MySQL also works).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Install (2 minutes)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
+**Linux / macOS / Git Bash**
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+bash install.sh my-portfolio
+cd my-portfolio && php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+**Windows (cmd)**
+```bat
+install.bat my-portfolio
+cd my-portfolio
+php artisan serve
+```
 
-## Contributing
+**Manual**
+```bash
+composer create-project laravel/laravel my-portfolio
+# copy the folders app config database public resources routes from this package into my-portfolio (merge/overwrite)
+cd my-portfolio
+php artisan storage:link        # needed for profile photos
+php artisan migrate --seed
+php artisan serve
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Open http://127.0.0.1:8000
 
-## Code of Conduct
+## Default accounts (created by the seeder)
+| Role  | Login                     | Password        |
+|-------|---------------------------|-----------------|
+| Admin | admin@example.com         | ChangeMe123!    |
+| User  | natvannak@example.com     | ChangeMe123!    |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+The second account holds your original portfolio (public at `/natvannak`).
+**Change both passwords** (My account) — or set `PORTFOLIO_ADMIN_EMAIL` / `PORTFOLIO_ADMIN_PASSWORD` in `.env` *before* running `migrate --seed`.
 
-## Security Vulnerabilities
+## Features
+* **Multi-user** – each user has a username and a public page `/{username}`; `/` shows a directory of published portfolios.
+* **Roles** – `admin` (everything) and `user` (own portfolio only).
+* **Admin full CRUD**
+  * Users: create / edit / disable / delete, change role, reset password
+  * “Manage content” lets an admin edit any user’s portfolio
+* **User CRUD** for: hero stats, about cards, experience, skill categories, projects, research topics
+  (add, edit, delete, display order) + profile texts, social links, photo upload.
+* **Draft / publish** – a portfolio is hidden until its owner ticks *Publish*. Owner & admins can preview drafts.
+* Dark/light theme toggle, responsive layout and reveal animations are unchanged.
+* Security: CSRF on all forms, escaped output, hashed passwords, login throttling, ownership-scoped queries, URL validation (http/https only), image upload validation.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Useful `.env` options
+```
+PORTFOLIO_DEFAULT_USER=natvannak   # show this portfolio at "/" instead of the directory
+PORTFOLIO_ALLOW_REGISTRATION=true  # false = only admins can create users
+```
 
-## License
+## Where things are
+| What | File |
+|------|------|
+| Public portfolio template (your original HTML) | `resources/views/portfolio.blade.php` |
+| Styles / script (your originals) | `public/css/style.css`, `public/js/script.js` |
+| Back-office | `resources/views/admin/**`, `public/css/admin.css` |
+| Section definitions (fields & validation) | `app/Support/Sections.php` |
+| Generic CRUD | `app/Http/Controllers/SectionController.php` |
+| User management | `app/Http/Controllers/UserController.php` |
+| Routes | `routes/web.php` |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Add a new section (e.g. *Publications*): create a migration + model, add a relation on `User`,
+and add one entry to `Sections::all()` — the CRUD pages, routes and menu appear automatically
+(then render it in `portfolio.blade.php`).
+
+## Text formats used in the forms
+* Bullets / paragraphs → one per line
+* Skills / tags / code items → comma separated
+* `**bold**` is supported in the About text
