@@ -11,6 +11,7 @@ pipeline {
     environment {
     APP_IMAGE = 'portfolio-app'
     COMPOSE_PROJECT_NAME = 'portfolio-ci'
+    DOCKERHUB_USER = 'msr160004'
     }
 
     stages {
@@ -76,6 +77,34 @@ pipeline {
                     -t ${APP_IMAGE}:latest \
                     -f docker/php/Dockerfile .
                 '''
+            }
+        }
+        stage('8. Push Image to Docker Hub') {
+            steps {
+             withCredentials([
+             usernamePassword(
+                credentialsId: 'dockerhub-credentials',
+                usernameVariable: 'DOCKERHUB_USERNAME',
+                passwordVariable: 'DOCKERHUB_TOKEN'
+            )
+            ]) {
+            sh '''
+                echo "$DOCKERHUB_TOKEN" | docker login \
+                    -u "$DOCKERHUB_USERNAME" \
+                    --password-stdin
+
+                docker tag ${APP_IMAGE}:${BUILD_NUMBER} \
+                    ${DOCKERHUB_USER}/${APP_IMAGE}:${BUILD_NUMBER}
+
+                docker tag ${APP_IMAGE}:latest \
+                    ${DOCKERHUB_USER}/${APP_IMAGE}:latest
+
+                docker push ${DOCKERHUB_USER}/${APP_IMAGE}:${BUILD_NUMBER}
+                docker push ${DOCKERHUB_USER}/${APP_IMAGE}:latest
+
+                docker logout
+            '''
+                }
             }
         }
     }
