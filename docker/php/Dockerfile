@@ -1,4 +1,22 @@
-FROM php:8.4-fpm
+
+# ==========================================
+# Stage 1: Build Frontend Assets
+# ==========================================
+FROM node:22-alpine AS frontend
+
+WORKDIR /var/www/html
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+
+# ==========================================
+# Stage 2: Laravel PHP Production
+# ==========================================
+FROM php:8.4-fpm AS production
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -31,7 +49,20 @@ WORKDIR /var/www/html
 
 COPY . .
 
-RUN chown -R www-data:www-data storage bootstrap/cache
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader
+
+COPY --from=frontend /var/www/html/public/build ./public/build
+
+RUN mkdir -p storage/framework/cache \
+    storage/framework/sessions \
+    storage/framework/views \
+    storage/logs \
+    bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
 
 EXPOSE 9000
 

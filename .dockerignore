@@ -1,0 +1,34 @@
+
+# Git
+.git
+.github
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+vendor
+node_modules
+
+# Laravel runtime files
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+# PHPUnit
+.phpunit.result.cache
+
+# Local database backup
+portfolio_backup.sql
+
+# IDE and OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Documentation / temporary files
+*.log

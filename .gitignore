@@ -1,6 +1,22 @@
+# Environment
 .env
 .env.*
 !.env.example
+
+# Database backup
+portfolio_backup.sql
+# Dependencies
 /vendor/
 /node_modules/
-/.DS_Store
+
+# Generated frontend assets
+/public/build/
+
+# PHPUnit cache
+.phpunit.result.cache
+
+# Laravel generated files
+/storage/logs/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
