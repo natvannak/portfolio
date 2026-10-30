@@ -20,7 +20,7 @@ class Sections
         return [
             'stats' => [
                 'relation' => 'stats', 'model' => Stat::class,
-                'label' => 'Hero stats', 'singular' => 'stat', 'icon' => '📈',
+                'label' => 'Hero stats', 'singular' => 'stat', 'icon' => 'chart-no-axes-combined',
                 'columns' => ['value' => 'Value', 'label' => 'Label'],
                 'fields' => [
                     ['name' => 'value', 'label' => 'Value', 'type' => 'text', 'rules' => 'required|string|max:30', 'help' => 'e.g. .NET'],
@@ -29,7 +29,7 @@ class Sections
             ],
             'highlights' => [
                 'relation' => 'highlights', 'model' => Highlight::class,
-                'label' => 'About cards', 'singular' => 'card', 'icon' => '🪪',
+                'label' => 'About cards', 'singular' => 'card', 'icon' => 'id-card',
                 'columns' => ['icon' => 'Icon', 'title' => 'Title', 'subtitle' => 'Subtitle'],
                 'fields' => [
                     ['name' => 'icon', 'label' => 'Icon (emoji)', 'type' => 'text', 'rules' => 'nullable|string|max:16'],
@@ -39,7 +39,7 @@ class Sections
             ],
             'experiences' => [
                 'relation' => 'experiences', 'model' => Experience::class,
-                'label' => 'Experience', 'singular' => 'experience', 'icon' => '💼',
+                'label' => 'Experience', 'singular' => 'experience', 'icon' => 'briefcase-business',
                 'columns' => ['date_label' => 'Date', 'title' => 'Title', 'company' => 'Company'],
                 'fields' => [
                     ['name' => 'date_label', 'label' => 'Date label', 'type' => 'text', 'rules' => 'nullable|string|max:30', 'help' => 'e.g. CURRENT or 2021 - 2024'],
@@ -50,7 +50,7 @@ class Sections
             ],
             'skills' => [
                 'relation' => 'skillCategories', 'model' => SkillCategory::class,
-                'label' => 'Skills', 'singular' => 'skill category', 'icon' => '🛠️',
+                'label' => 'Skills', 'singular' => 'skill category', 'icon' => 'wrench',
                 'columns' => ['name' => 'Category', 'skills' => 'Skills'],
                 'fields' => [
                     ['name' => 'name', 'label' => 'Category name', 'type' => 'text', 'rules' => 'required|string|max:100'],
@@ -59,7 +59,7 @@ class Sections
             ],
             'projects' => [
                 'relation' => 'projects', 'model' => Project::class,
-                'label' => 'Projects', 'singular' => 'project', 'icon' => '🚀',
+                'label' => 'Projects', 'singular' => 'project', 'icon' => 'rocket',
                 'columns' => ['icon' => 'Icon', 'title' => 'Title', 'tags' => 'Tags', 'featured' => 'Featured'],
                 'fields' => [
                     ['name' => 'icon', 'label' => 'Icon (emoji)', 'type' => 'text', 'rules' => 'nullable|string|max:16'],
@@ -73,7 +73,7 @@ class Sections
             ],
             'topics' => [
                 'relation' => 'researchTopics', 'model' => ResearchTopic::class,
-                'label' => 'Research topics', 'singular' => 'topic', 'icon' => '🔬',
+                'label' => 'Research topics', 'singular' => 'topic', 'icon' => 'microscope',
                 'columns' => ['name' => 'Topic'],
                 'fields' => [
                     ['name' => 'name', 'label' => 'Topic', 'type' => 'text', 'rules' => 'required|string|max:100'],

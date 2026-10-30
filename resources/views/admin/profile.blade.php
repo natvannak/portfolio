@@ -1,7 +1,17 @@
 @extends('admin.layout')
 @section('title', 'Profile & texts')
 @section('content')
-<div class="page-head"><h1>Profile & texts</h1></div>
+<div class="page-head">
+  <div>
+    <h1>Profile &amp; Texts</h1>
+    <p class="page-sub">Identity, hero, about texts, contact details and publishing status.</p>
+  </div>
+  @if($user->username)
+    <div class="page-actions">
+      <a class="btn secondary" target="_blank" rel="noopener" href="{{ route('portfolio.show', ['username' => $user->username]) }}"><x-icon name="external-link" /> View Portfolio</a>
+    </div>
+  @endif
+</div>
 
 <form method="POST" action="{{ route('admin.profile.update') }}" enctype="multipart/form-data" class="form">
   @csrf

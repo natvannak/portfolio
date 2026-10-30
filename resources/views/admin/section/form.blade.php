@@ -2,8 +2,13 @@
 @section('title', ($item->exists ? 'Edit ' : 'Add ') . $cfg['singular'])
 @section('content')
 <div class="page-head">
-  <h1>{{ $item->exists ? 'Edit' : 'Add' }} {{ $cfg['singular'] }}</h1>
-  <a class="btn secondary" href="{{ route('admin.section.index', ['section' => $section]) }}">← Back</a>
+  <div>
+    <h1>{{ $item->exists ? 'Edit' : 'Add' }} {{ $cfg['singular'] }}</h1>
+    <p class="page-sub">{{ $item->exists ? 'Update this ' : 'Create a new ' }}{{ strtolower($cfg['singular']) }} for the {{ strtolower($cfg['label']) }} section.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn secondary" href="{{ route('admin.section.index', ['section' => $section]) }}"><x-icon name="arrow-left" /> Back</a>
+  </div>
 </div>
 
 <form method="POST" class="form narrow"
@@ -24,6 +29,6 @@
     ]])
   </div>
 
-  <button class="btn primary" type="submit">{{ $item->exists ? 'Save changes' : 'Create' }}</button>
+  <button class="btn primary" type="submit"><x-icon name="{{ $item->exists ? 'pencil' : 'plus' }}" :size="16" /> {{ $item->exists ? 'Save changes' : 'Create' }}</button>
 </form>
 @endsection

@@ -1,7 +1,12 @@
 @extends('admin.layout')
 @section('title', 'My account')
 @section('content')
-<div class="page-head"><h1>My account</h1></div>
+<div class="page-head">
+  <div>
+    <h1>My Account</h1>
+    <p class="page-sub">Your name, portfolio URL, login email and password.</p>
+  </div>
+</div>
 
 <form method="POST" action="{{ route('admin.account.update') }}" class="form narrow">
   @csrf

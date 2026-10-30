@@ -2,8 +2,13 @@
 @section('title', $user->exists ? 'Edit user' : 'Add user')
 @section('content')
 <div class="page-head">
-  <h1>{{ $user->exists ? 'Edit user' : 'Add user' }}</h1>
-  <a class="btn secondary" href="{{ route('admin.users.index') }}">← Back</a>
+  <div>
+    <h1>{{ $user->exists ? 'Edit user' : 'Add user' }}</h1>
+    <p class="page-sub">{{ $user->exists ? 'Update account details, role and status.' : 'Create a new account with its own portfolio.' }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn secondary" href="{{ route('admin.users.index') }}"><x-icon name="arrow-left" /> Back</a>
+  </div>
 </div>
 
 <form method="POST" class="form narrow"
@@ -54,6 +59,6 @@
     @if($isSelf)<small>You cannot change your own role or disable yourself.</small>@endif
   </div>
 
-  <button class="btn primary" type="submit">{{ $user->exists ? 'Save changes' : 'Create user' }}</button>
+  <button class="btn primary" type="submit"><x-icon name="{{ $user->exists ? 'pencil' : 'plus' }}" :size="16" /> {{ $user->exists ? 'Save changes' : 'Create user' }}</button>
 </form>
 @endsection
