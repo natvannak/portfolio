@@ -2,6 +2,20 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'DEPLOY_ACTION',
+            choices: ['DEPLOY', 'ROLLBACK'],
+            description: 'Select deployment action'
+        )
+
+        choice(
+            name: 'GIT_TAG',
+            choices: ['v1.3.0', 'v1.2.0', 'v1.0.0'],
+            description: 'Select Git release version'
+        )
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -9,17 +23,23 @@ pipeline {
     }
 
     environment {
-    APP_IMAGE = 'sortsom/portfolio-laravel'
-    COMPOSE_PROJECT_NAME = 'portfolio-ci'
-    DOCKERHUB_USER = 'msr160004'
+        APP_IMAGE = 'sortsom/portfolio-laravel'
+        NGINX_IMAGE = 'sortsom/portfolio-nginx'
+        COMPOSE_PROJECT_NAME = 'portfolio-ci'
     }
 
     stages {
-
-        stage('1. Checkout GitHub') {
+        stage('1. Checkout Selected Git Tag') {
             steps {
-                checkout scm
-                sh 'git rev-parse --short HEAD'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "refs/tags/${params.GIT_TAG}"]],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/natvannak/portfolio.git'
+                    ]]
+                ])
+
+                sh 'git describe --tags --exact-match'
             }
         }
 
@@ -28,7 +48,6 @@ pipeline {
                 sh '''
                     cp .env.example .env
                     test -f .env
-                    echo "CI environment prepared"
                 '''
             }
         }
@@ -43,9 +62,7 @@ pipeline {
             steps {
                 sh '''
                     docker compose run --rm --no-deps app \
-                    composer install \
-                    --no-interaction \
-                    --prefer-dist
+                    composer install --no-interaction --prefer-dist
                 '''
             }
         }
@@ -68,48 +85,45 @@ pipeline {
             }
         }
 
-        stage('7. Build Production Docker Image') {
+        stage('7. Build Versioned Images') {
             steps {
                 sh '''
-                    docker build \
-                    --pull \
-                    -t ${APP_IMAGE}:${BUILD_NUMBER} \
-                    -t ${APP_IMAGE}:latest \
+                    docker build --pull \
+                    -t ${APP_IMAGE}:${GIT_TAG} \
                     -f docker/php/Dockerfile .
+
+                    docker build --pull \
+                    -t ${NGINX_IMAGE}:${GIT_TAG} \
+                    -f docker/nginx/Dockerfile .
                 '''
             }
         }
-        
-        stage('8.Docker Hub Login') {
-        steps {
-            withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub-credentials',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-            )
-            ]) {
-            sh '''
-                echo "$DOCKER_PASS" | docker login \
-                    -u "$DOCKER_USER" --password-stdin
-            '''
+
+        stage('8. Docker Hub Login') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login \
+                        -u "$DOCKER_USER" --password-stdin
+                    '''
                 }
             }
         }
-        stage('9. Push Docker Image') {
+
+        stage('9. Push Versioned Images') {
             steps {
                 sh '''
-            echo "Pushing Docker images to Docker Hub..."
-
-            docker push ${APP_IMAGE}:${BUILD_NUMBER}
-
-            docker push ${APP_IMAGE}:latest
-
-            echo "Docker images pushed successfully!"
-        '''
+                    docker push ${APP_IMAGE}:${GIT_TAG}
+                    docker push ${NGINX_IMAGE}:${GIT_TAG}
+                '''
             }
         }
-
     }
 
     post {
@@ -118,11 +132,11 @@ pipeline {
         }
 
         success {
-            echo 'CI Pipeline completed successfully!'
+            echo 'Versioned CI Build completed successfully!'
         }
 
         failure {
-            echo 'CI Pipeline failed. Check the stage logs.'
+            echo 'Pipeline failed. Check stage logs.'
         }
     }
 }
