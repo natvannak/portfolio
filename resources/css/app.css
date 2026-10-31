@@ -1,9 +1,76 @@
+
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* =================================
+   LIGHT MODE - DEFAULT
+================================= */
+:root {
+    color-scheme: light;
+
+    --primary: #2563EB;
+    --secondary: #6366F1;
+    --accent: #06B6D4;
+
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --surface-secondary: #F1F5F9;
+
+    --text: #0F172A;
+    --muted: #64748B;
+    --border: #E2E8F0;
+
+    --success: #16A34A;
+    --warning: #F59E0B;
+    --danger: #DC2626;
+
+    --radius: 12px;
+}
+
+/* =================================
+   DARK MODE
+================================= */
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    --primary: #60A5FA;
+    --secondary: #818CF8;
+    --accent: #22D3EE;
+
+    --bg: #0B1120;
+    --surface: #111827;
+    --surface-secondary: #1E293B;
+
+    --text: #F8FAFC;
+    --muted: #94A3B8;
+    --border: #334155;
+
+    --success: #4ADE80;
+    --warning: #FBBF24;
+    --danger: #F87171;
+}
+
+/* =================================
+   GLOBAL STYLES
+================================= */
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+    transition: all 0.2s ease;
 }
