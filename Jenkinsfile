@@ -79,7 +79,8 @@ pipeline {
                 '''
             }
         }
-        stage('Docker Hub Login') {
+        
+        stage('8.Docker Hub Login') {
         steps {
             withCredentials([
             usernamePassword(
@@ -95,6 +96,20 @@ pipeline {
                 }
             }
         }
+        stage('9. Push Docker Image') {
+            steps {
+                sh '''
+            echo "Pushing Docker images to Docker Hub..."
+
+            docker push ${APP_IMAGE}:${BUILD_NUMBER}
+
+            docker push ${APP_IMAGE}:latest
+
+            echo "Docker images pushed successfully!"
+        '''
+            }
+        }
+
     }
 
     post {
