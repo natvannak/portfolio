@@ -26,72 +26,83 @@ pipeline {
         APP_IMAGE = 'sortsom/portfolio-laravel'
         NGINX_IMAGE = 'sortsom/portfolio-nginx'
         COMPOSE_PROJECT_NAME = 'portfolio-ci'
-        GIT_TAG = "${params.GIT_TAG}"
     }
 
     stages {
 
-        stage('1. Checkout Selected Git Tag') {
+        stage('1. Prepare Workspace') {
+            steps {
+                deleteDir()
+                echo "Action: ${params.DEPLOY_ACTION}"
+                echo "Version: ${params.GIT_TAG}"
+            }
+        }
+
+        stage('2. Checkout Selected Git Tag') {
             steps {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: "refs/tags/${params.GIT_TAG}"]],
                     userRemoteConfigs: [[
                         url: 'https://github.com/natvannak/portfolio.git',
-                        refspec: '+refs/tags/*:refs/remotes/origin/tags/*'
+                        refspec: '+refs/tags/*:refs/tags/*'
                     ]]
                 ])
 
                 sh '''
-                    echo "Selected Version: ${GIT_TAG}"
+                    set -eu
                     git describe --tags --exact-match
-                    git log -1 --oneline
+                    git rev-parse HEAD
                 '''
             }
         }
 
-        stage('2. Validate Deployment Files') {
+        stage('3. Validate Deployment Files') {
             steps {
                 sh '''
                     set -eu
-
                     test -f .env.example
                     test -f docker/php/Dockerfile
                     test -f docker/nginx/Dockerfile
-
-                    echo "All required files found."
+                    echo "Deployment files validated."
                 '''
             }
         }
 
-        stage('3. Prepare CI Environment') {
+        stage('4. Prepare CI Environment') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
-                sh '''
-                    cp .env.example .env
-                    test -f .env
-                    echo "CI environment prepared."
-                '''
+                sh 'cp .env.example .env'
             }
         }
 
-        stage('4. Build CI Runtime') {
+        stage('5. Build CI Runtime') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
                 sh 'docker compose build app'
             }
         }
 
-        stage('5. Install Composer Dependencies') {
+        stage('6. Install Composer Dependencies') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
                 sh '''
                     docker compose run --rm --no-deps app \
-                    composer install \
-                    --no-interaction \
-                    --prefer-dist
+                    composer install --no-interaction --prefer-dist
                 '''
             }
         }
 
-        stage('6. Generate Testing Key') {
+        stage('7. Generate Testing Key') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
                 sh '''
                     docker compose run --rm --no-deps app \
@@ -100,7 +111,10 @@ pipeline {
             }
         }
 
-        stage('7. PHPUnit Tests') {
+        stage('8. PHPUnit Tests') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
                 sh '''
                     docker compose run --rm --no-deps app \
@@ -109,29 +123,32 @@ pipeline {
             }
         }
 
-        stage('8. Build Versioned Docker Images') {
+        stage('9. Build Versioned Images') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
             steps {
                 sh '''
                     set -eu
-
-                    echo "Building Laravel: ${GIT_TAG}"
 
                     docker build --pull \
                     -t ${APP_IMAGE}:${GIT_TAG} \
                     -f docker/php/Dockerfile .
 
-                    echo "Building Nginx: ${GIT_TAG}"
-
                     docker build --pull \
                     -t ${NGINX_IMAGE}:${GIT_TAG} \
                     -f docker/nginx/Dockerfile .
-
-                    echo "Both Docker images built successfully."
                 '''
             }
         }
 
-        stage('9. Docker Hub Login') {
+        stage('10. Docker Hub Login') {
+            when {
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY' ||
+                    params.DEPLOY_ACTION == 'ROLLBACK'
+                }
+            }
             steps {
                 withCredentials([
                     usernamePassword(
@@ -148,15 +165,33 @@ pipeline {
             }
         }
 
-        stage('10. Push Versioned Images') {
+        stage('11. Push Versioned Images') {
+            when {
+                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+            }
+            steps {
+                sh '''
+                    docker push ${APP_IMAGE}:${GIT_TAG}
+                    docker push ${NGINX_IMAGE}:${GIT_TAG}
+                '''
+            }
+        }
+
+        stage('12. Verify Rollback Images') {
+            when {
+                expression { params.DEPLOY_ACTION == 'ROLLBACK' }
+            }
             steps {
                 sh '''
                     set -eu
 
-                    docker push ${APP_IMAGE}:${GIT_TAG}
-                    docker push ${NGINX_IMAGE}:${GIT_TAG}
+                    docker manifest inspect \
+                    ${APP_IMAGE}:${GIT_TAG} > /dev/null
 
-                    echo "Version ${GIT_TAG} pushed successfully."
+                    docker manifest inspect \
+                    ${NGINX_IMAGE}:${GIT_TAG} > /dev/null
+
+                    echo "Both rollback images are available."
                 '''
             }
         }
@@ -165,14 +200,15 @@ pipeline {
     post {
         always {
             sh 'docker compose down --remove-orphans || true'
+            sh 'docker logout || true'
         }
 
         success {
-            echo 'Versioned CI Build completed successfully!'
+            echo "Pipeline completed: ${params.DEPLOY_ACTION} ${params.GIT_TAG}"
         }
 
         failure {
-            echo 'Pipeline failed. Check the failed stage in Console Output.'
+            echo 'Pipeline failed. Check Console Output.'
         }
     }
 }
