@@ -76,7 +76,9 @@ services:
     volumes:
       - portfolio_db_data:/var/lib/mysql
     networks:
-      - portfolio_network
+      portfolio_network:
+        aliases:
+          - db
     deploy:
       replicas: 1
       restart_policy:
