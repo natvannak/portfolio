@@ -11,7 +11,7 @@ pipeline {
 
         choice(
             name: 'GIT_TAG',
-            choices: ['v1.3.0', 'v1.2.0', 'v1.0.0'],
+            choices: ['v1.4.0','1.3.0', 'v1.2.0', 'v1.0.0'],
             description: 'Select Git release version'
         )
     }
