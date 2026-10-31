@@ -11,7 +11,7 @@ pipeline {
 
         choice(
             name: 'GIT_TAG',
-            choices: ['v1.4.0','1.3.0', 'v1.2.0', 'v1.0.0'],
+            choices: ['v1.4.0', 'v1.3.0', 'v1.2.0', 'v1.0.0'],
             description: 'Select Git release version'
         )
     }
@@ -128,17 +128,27 @@ pipeline {
                 expression { params.DEPLOY_ACTION == 'DEPLOY' }
             }
             steps {
-                sh '''
-                    set -eu
+                withEnv([
+                    "GIT_TAG=${params.GIT_TAG}",
+                    "APP_IMAGE=${env.APP_IMAGE}",
+                    "NGINX_IMAGE=${env.NGINX_IMAGE}"
+                ]) {
+                    sh '''
+                        set -eu
 
-                    docker build --pull \
-                    -t ${APP_IMAGE}:${GIT_TAG} \
-                    -f docker/php/Dockerfile .
+                        echo "Building version: $GIT_TAG"
 
-                    docker build --pull \
-                    -t ${NGINX_IMAGE}:${GIT_TAG} \
-                    -f docker/nginx/Dockerfile .
-                '''
+                        docker build --pull \
+                            -t "$APP_IMAGE:$GIT_TAG" \
+                            -f docker/php/Dockerfile .
+
+                        docker build --pull \
+                            -t "$NGINX_IMAGE:$GIT_TAG" \
+                            -f docker/nginx/Dockerfile .
+
+                        echo "Versioned images built successfully."
+                    '''
+                }
             }
         }
 
@@ -158,8 +168,9 @@ pipeline {
                     )
                 ]) {
                     sh '''
+                        set +x
                         echo "$DOCKER_PASS" | docker login \
-                        -u "$DOCKER_USER" --password-stdin
+                            -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
@@ -170,10 +181,20 @@ pipeline {
                 expression { params.DEPLOY_ACTION == 'DEPLOY' }
             }
             steps {
-                sh '''
-                    docker push ${APP_IMAGE}:${GIT_TAG}
-                    docker push ${NGINX_IMAGE}:${GIT_TAG}
-                '''
+                withEnv([
+                    "GIT_TAG=${params.GIT_TAG}",
+                    "APP_IMAGE=${env.APP_IMAGE}",
+                    "NGINX_IMAGE=${env.NGINX_IMAGE}"
+                ]) {
+                    sh '''
+                        set -eu
+
+                        docker push "$APP_IMAGE:$GIT_TAG"
+                        docker push "$NGINX_IMAGE:$GIT_TAG"
+
+                        echo "Images pushed successfully."
+                    '''
+                }
             }
         }
 
@@ -182,17 +203,23 @@ pipeline {
                 expression { params.DEPLOY_ACTION == 'ROLLBACK' }
             }
             steps {
-                sh '''
-                    set -eu
+                withEnv([
+                    "GIT_TAG=${params.GIT_TAG}",
+                    "APP_IMAGE=${env.APP_IMAGE}",
+                    "NGINX_IMAGE=${env.NGINX_IMAGE}"
+                ]) {
+                    sh '''
+                        set -eu
 
-                    docker manifest inspect \
-                    ${APP_IMAGE}:${GIT_TAG} > /dev/null
+                        docker manifest inspect \
+                            "$APP_IMAGE:$GIT_TAG" > /dev/null
 
-                    docker manifest inspect \
-                    ${NGINX_IMAGE}:${GIT_TAG} > /dev/null
+                        docker manifest inspect \
+                            "$NGINX_IMAGE:$GIT_TAG" > /dev/null
 
-                    echo "Both rollback images are available."
-                '''
+                        echo "Both rollback images are available."
+                    '''
+                }
             }
         }
     }
