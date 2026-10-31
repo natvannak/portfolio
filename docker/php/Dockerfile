@@ -57,12 +57,18 @@ RUN composer install \
 
 COPY --from=frontend /var/www/html/public/build ./public/build
 
-RUN mkdir -p storage/framework/cache \
+# Prepare Laravel directories and permissions
+RUN mkdir -p \
+    storage/app/public \
+    storage/framework/cache \
     storage/framework/sessions \
     storage/framework/views \
     storage/logs \
     bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
+
+# Create Laravel public storage symlink
+RUN php artisan storage:link
 
 EXPOSE 9000
 

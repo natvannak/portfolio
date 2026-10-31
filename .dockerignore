@@ -36,3 +36,6 @@ Thumbs.db
 # Production secrets
 .secrets/
 *.secret
+
+public/storage
+public/storage_backup
