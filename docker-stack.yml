@@ -1,0 +1,102 @@
+
+version: "3.8"
+
+services:
+  app:
+    image: sortsom/portfolio-laravel:13
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: "http://54.145.242.74"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: portfoliodb
+      DB_USERNAME: portfolio
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+    secrets:
+      - app_key
+      - db_password
+    command:
+      - sh
+      - -c
+      - 'export APP_KEY="$$(cat /run/secrets/app_key)" && export DB_PASSWORD="$$(cat /run/secrets/db_password)" && exec php-fpm'
+    networks:
+      portfolio_network:
+        aliases:
+          - app
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+      placement:
+        preferences:
+          - spread: node.id
+
+  nginx:
+    image: sortsom/portfolio-nginx:13
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+    networks:
+      - portfolio_network
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: portfoliodb
+      MYSQL_USER: portfolio
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+    secrets:
+      - db_password
+      - db_root_password
+    volumes:
+      - portfolio_db_data:/var/lib/mysql
+    networks:
+      - portfolio_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname == ip-172-31-31-13
+
+networks:
+  portfolio_network:
+    driver: overlay
+
+volumes:
+  portfolio_db_data:
+    driver: local
+
+secrets:
+  app_key:
+    external: true
+  db_password:
+    external: true
+  db_root_password:
+    external: true
