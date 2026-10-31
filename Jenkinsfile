@@ -11,7 +11,13 @@ pipeline {
 
         choice(
             name: 'GIT_TAG',
-            choices: ['v1.4.0', 'v1.3.0', 'v1.2.0', 'v1.0.0'],
+            choices: [
+                'v1.5.0',
+                'v1.4.0',
+                'v1.3.0',
+                'v1.2.0',
+                'v1.0.0'
+            ],
             description: 'Select Git release version'
         )
     }
@@ -43,7 +49,9 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: "refs/tags/${params.GIT_TAG}"]],
+                    branches: [[
+                        name: "refs/tags/${params.GIT_TAG}"
+                    ]],
                     userRemoteConfigs: [[
                         url: 'https://github.com/natvannak/portfolio.git',
                         refspec: '+refs/tags/*:refs/tags/*'
@@ -78,12 +86,16 @@ pipeline {
 
         stage('4. Prepare CI Environment') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 sh '''
                     set -eu
+
                     cp .env.example .env
+
                     echo "CI environment prepared."
                 '''
             }
@@ -91,11 +103,14 @@ pipeline {
 
         stage('5. Build CI Runtime') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 sh '''
                     set -eu
+
                     docker compose build app
                 '''
             }
@@ -103,7 +118,9 @@ pipeline {
 
         stage('6. Install Composer Dependencies') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 sh '''
@@ -120,7 +137,9 @@ pipeline {
 
         stage('7. Generate Testing Key') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 sh '''
@@ -135,7 +154,9 @@ pipeline {
 
         stage('8. PHPUnit Tests') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 sh '''
@@ -150,7 +171,9 @@ pipeline {
 
         stage('9. Build Versioned Images') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 withEnv([
@@ -205,7 +228,9 @@ pipeline {
 
         stage('11. Push Versioned Images') {
             when {
-                expression { params.DEPLOY_ACTION == 'DEPLOY' }
+                expression {
+                    params.DEPLOY_ACTION == 'DEPLOY'
+                }
             }
             steps {
                 withEnv([
@@ -227,7 +252,9 @@ pipeline {
 
         stage('12. Verify Rollback Images') {
             when {
-                expression { params.DEPLOY_ACTION == 'ROLLBACK' }
+                expression {
+                    params.DEPLOY_ACTION == 'ROLLBACK'
+                }
             }
             steps {
                 withEnv([
@@ -252,17 +279,106 @@ pipeline {
     }
 
     post {
+
         always {
-            sh 'docker compose down --remove-orphans || true'
-            sh 'docker logout || true'
+            script {
+
+                // 1. Docker Cleanup
+                echo "Cleaning Docker environment..."
+
+                sh 'docker compose down --remove-orphans || true'
+                sh 'docker logout || true'
+
+                // 2. Get Pipeline Result
+                def status = currentBuild.currentResult ?: 'UNKNOWN'
+
+                def emoji = status == 'SUCCESS' ? '✅' :
+                            status == 'ABORTED' ? '⏹️' : '❌'
+
+                def resultMessage = status == 'SUCCESS' ?
+                    '🎉 Pipeline completed successfully!' :
+                    status == 'ABORTED' ?
+                    '⏹️ Pipeline was aborted.' :
+                    '⚠️ Pipeline failed. Check Jenkins Console Output.'
+
+                // 3. Telegram Message
+                def telegramMessage = """
+${emoji} PORTFOLIO CI/CD PIPELINE
+
+━━━━━━━━━━━━━━━━━━━━
+📌 Job: ${env.JOB_NAME}
+🔢 Build: #${env.BUILD_NUMBER}
+📊 Status: ${status}
+
+🚀 Action: ${params.DEPLOY_ACTION}
+🏷️ Version: ${params.GIT_TAG}
+
+⏱️ Duration: ${currentBuild.durationString}
+
+🔗 Build URL:
+${env.BUILD_URL}
+
+━━━━━━━━━━━━━━━━━━━━
+${resultMessage}
+""".stripIndent().trim()
+
+                // 4. Send Telegram Notification
+                try {
+
+                    withCredentials([
+                        string(
+                            credentialsId: 'telegram-bot-token',
+                            variable: 'TELEGRAM_TOKEN'
+                        ),
+                        string(
+                            credentialsId: 'telegram-chat-id',
+                            variable: 'TELEGRAM_CHAT_ID'
+                        )
+                    ]) {
+
+                        withEnv([
+                            "TELEGRAM_MESSAGE=${telegramMessage}"
+                        ]) {
+
+                            sh '''
+                                set +x
+
+                                curl --silent --show-error --fail \
+                                    --request POST \
+                                    --max-time 20 \
+                                    "https://api.telegram.org/bot9289112136:AAH8iQABa8lVYBQagCbQej1W6zXyLUwxDnU/getUpdates" \
+                                    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+                                    --data-urlencode "text=${TELEGRAM_MESSAGE}"
+
+                                echo "Telegram notification sent successfully."
+                            '''
+                        }
+                    }
+
+                } catch (Exception e) {
+
+                    echo "WARNING: Telegram notification failed."
+                    echo "Check Telegram credentials, Chat ID and network connection."
+                }
+            }
         }
 
         success {
-            echo "Pipeline completed: ${params.DEPLOY_ACTION} ${params.GIT_TAG}"
+            echo """
+            ==================================
+            PIPELINE SUCCESS
+            Action: ${params.DEPLOY_ACTION}
+            Version: ${params.GIT_TAG}
+            ==================================
+            """
         }
 
         failure {
             echo 'Pipeline failed. Check Console Output.'
+        }
+
+        aborted {
+            echo 'Pipeline was aborted.'
         }
     }
 }
