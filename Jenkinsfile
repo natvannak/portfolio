@@ -33,6 +33,7 @@ pipeline {
         stage('1. Prepare Workspace') {
             steps {
                 deleteDir()
+
                 echo "Action: ${params.DEPLOY_ACTION}"
                 echo "Version: ${params.GIT_TAG}"
             }
@@ -51,6 +52,9 @@ pipeline {
 
                 sh '''
                     set -eu
+
+                    echo "Checking selected Git release..."
+
                     git describe --tags --exact-match
                     git rev-parse HEAD
                 '''
@@ -61,9 +65,12 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+
                     test -f .env.example
                     test -f docker/php/Dockerfile
                     test -f docker/nginx/Dockerfile
+                    test -f docker-compose.yml
+
                     echo "Deployment files validated."
                 '''
             }
@@ -74,7 +81,11 @@ pipeline {
                 expression { params.DEPLOY_ACTION == 'DEPLOY' }
             }
             steps {
-                sh 'cp .env.example .env'
+                sh '''
+                    set -eu
+                    cp .env.example .env
+                    echo "CI environment prepared."
+                '''
             }
         }
 
@@ -83,7 +94,10 @@ pipeline {
                 expression { params.DEPLOY_ACTION == 'DEPLOY' }
             }
             steps {
-                sh 'docker compose build app'
+                sh '''
+                    set -eu
+                    docker compose build app
+                '''
             }
         }
 
@@ -93,8 +107,13 @@ pipeline {
             }
             steps {
                 sh '''
-                    docker compose run --rm --no-deps app \
-                    composer install --no-interaction --prefer-dist
+                    set -eu
+
+                    docker compose run --rm --no-deps \
+                        --user "$(id -u):$(id -g)" \
+                        app composer install \
+                        --no-interaction \
+                        --prefer-dist
                 '''
             }
         }
@@ -105,8 +124,11 @@ pipeline {
             }
             steps {
                 sh '''
-                    docker compose run --rm --no-deps app \
-                    php artisan key:generate --force
+                    set -eu
+
+                    docker compose run --rm --no-deps \
+                        --user "$(id -u):$(id -g)" \
+                        app php artisan key:generate --force
                 '''
             }
         }
@@ -117,8 +139,11 @@ pipeline {
             }
             steps {
                 sh '''
-                    docker compose run --rm --no-deps app \
-                    php artisan test
+                    set -eu
+
+                    docker compose run --rm --no-deps \
+                        --user "$(id -u):$(id -g)" \
+                        app php artisan test
                 '''
             }
         }
@@ -169,8 +194,10 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
+
                         echo "$DOCKER_PASS" | docker login \
-                            -u "$DOCKER_USER" --password-stdin
+                            -u "$DOCKER_USER" \
+                            --password-stdin
                     '''
                 }
             }
