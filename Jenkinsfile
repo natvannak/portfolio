@@ -9,7 +9,7 @@ pipeline {
     }
 
     environment {
-    APP_IMAGE = 'portfolio-app'
+    APP_IMAGE = 'sortsom/portfolio-laravel'
     COMPOSE_PROJECT_NAME = 'portfolio-ci'
     DOCKERHUB_USER = 'msr160004'
     }
