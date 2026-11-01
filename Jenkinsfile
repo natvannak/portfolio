@@ -42,19 +42,16 @@ pipeline {
         MANAGER_HOST          = '3.209.10.87'
         MANAGER_USER          = 'ubuntu'
 
-        // Stack name + service name inside docker-compose.swarm.yml  =>  portfolio_app
         STACK_NAME            = 'portfolio'
-        SERVICE_NAME          = 'portfolio_app'
-        COMPOSE_FILE_NAME     = 'docker-compose.swarm.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
+        SERVICE_NAME          = 'portfolio_web'
+        COMPOSE_FILE_NAME     = 'docker-compose.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
 
         APP_DOCKERFILE        = 'docker/php/Dockerfile'      // Laravel (php-fpm) image => natvannak/portfolio:<tag>
         NGINX_DOCKERFILE      = 'docker/nginx/Dockerfile'    // nginx image => natvannak/portfolio:nginx-<tag> (skipped if file not found)
-        REMOTE_DIR            = '/home/ubuntu/portfolio'     // directory on Swarm manager where the stack file is copied
+        REMOTE_DIR            = '/home/ubuntu/portfolio'  // remote directory on Swarm manager where docker-compose.yml is copied
 
-        DOCKERHUB_CREDENTIALS = 'docker-hub-id'              // Username with password (use Access Token)
-        SSH_CREDENTIALS       = 'portfolio-swarm-key'        // SSH Username with private key
-        DB_PASSWORD_CRED      = 'laravel-db-password'        // Secret text
-        DB_ROOT_PASSWORD_CRED = 'laravel-db-root-password'   // Secret text
+        DOCKERHUB_CREDENTIALS = 'docker-hub-id'      // Username with password (use Access Token)
+        SSH_CREDENTIALS       = 'portfolio-swarm-key'              // SSH Username with private key
 
         PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
     }
@@ -320,7 +317,6 @@ pipeline {
                     params.ACTION in ['deploy', 'rollback']
                 }
             }
-
             steps {
                 sshagent(["${SSH_CREDENTIALS}"]) {
                     sh '''
@@ -404,7 +400,7 @@ pipeline {
                             echo "Image   : ${FULL_IMAGE_NAME}"
                             echo "======================================"
 
-                            # Temporary env file (variables used by the stack file)
+                            # Temporary env file (variables used by docker-compose.yml)
                             umask 077
                             printf "IMAGE_TAG='%s'\\nDOCKERHUB_REPO='%s'\\nDB_PASSWORD='%s'\\nDB_ROOT_PASSWORD='%s'\\n" \
                                 "${IMAGE_TAG}" \
@@ -477,7 +473,7 @@ PREVIOUS_IMAGE="$(docker service inspect \
 echo "Previous image: ${PREVIOUS_IMAGE}"
 echo "New image     : ${FULL_IMAGE_NAME}"
 
-# Load variables for the stack file
+# Load variables for docker-compose.yml
 set -a
 . "${REMOTE_DIR}/deploy.env"
 set +a
@@ -542,19 +538,19 @@ STACK_NAME="$1"
 SERVICE_NAME="$2"
 
 echo "======================================"
-echo "Stack Services (app, nginx, db)"
+echo "Stack Services (web, db)"
 echo "======================================"
 docker stack services "${STACK_NAME}"
 
 echo "======================================"
-echo "Current App Image"
+echo "Current Web Image"
 echo "======================================"
 docker service inspect \
     --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' \
     "${SERVICE_NAME}"
 
 echo "======================================"
-echo "App Update Status"
+echo "Web Update Status"
 echo "======================================"
 docker service inspect \
     --format '{{json .UpdateStatus}}' \
