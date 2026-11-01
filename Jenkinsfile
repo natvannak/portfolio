@@ -278,11 +278,25 @@ pipeline {
                         echo "Image: ${FULL_IMAGE_NAME}"
                         echo "======================================"
 
-                        docker push "${FULL_IMAGE_NAME}"
+                        # Retry push (network to Docker Hub can time out)
+                        push_retry() {
+                            n=1
+                            until docker push "$1"; do
+                                if [ "$n" -ge 5 ]; then
+                                    echo "ERROR: push failed after $n attempts: $1"
+                                    return 1
+                                fi
+                                echo "Push failed (attempt $n). Retrying in 15s..."
+                                n=$((n + 1))
+                                sleep 15
+                            done
+                        }
+
+                        push_retry "${FULL_IMAGE_NAME}"
 
                         if docker image inspect "${NGINX_IMAGE_NAME}" >/dev/null 2>&1
                         then
-                            docker push "${NGINX_IMAGE_NAME}"
+                            push_retry "${NGINX_IMAGE_NAME}"
                             docker manifest inspect "${NGINX_IMAGE_NAME}" >/dev/null
                         fi
 
