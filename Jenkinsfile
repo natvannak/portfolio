@@ -42,11 +42,13 @@ pipeline {
         MANAGER_HOST          = '3.209.10.87'
         MANAGER_USER          = 'ubuntu'
 
-        // Stack name + service name inside docker-compose.yml  =>  homework3_web
+        // Stack name + service name inside docker-compose.swarm.yml  =>  homework3_app
         STACK_NAME            = 'homework3'
-        SERVICE_NAME          = 'homework3_web'
-        COMPOSE_FILE_NAME     = 'docker-compose.yml'
-        WEB_SERVICE           = 'web'      // must match the web service name in docker-compose.yml
+        SERVICE_NAME          = 'homework3_app'
+        COMPOSE_FILE_NAME     = 'docker-compose.swarm.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
+
+        APP_DOCKERFILE        = 'docker/php/Dockerfile'      // Laravel (php-fpm) image => natvannak/portfolio:<tag>
+        NGINX_DOCKERFILE      = 'docker/nginx/Dockerfile'    // nginx image => natvannak/portfolio:nginx-<tag> (skipped if file not found)
         REMOTE_DIR            = '/home/ubuntu/homework3'
 
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'      // Username with password (use Access Token)
@@ -103,6 +105,9 @@ pipeline {
                     env.IMAGE_TAG       = version ?: ''
                     env.FULL_IMAGE_NAME = version
                         ? "${env.DOCKERHUB_REPO}:${version}"
+                        : ''
+                    env.NGINX_IMAGE_NAME = version
+                        ? "${env.DOCKERHUB_REPO}:nginx-${version}"
                         : ''
 
                     echo "IMAGE TAG : ${env.IMAGE_TAG ?: '(not required)'}"
@@ -184,19 +189,29 @@ pipeline {
                     set -eu
 
                     echo "======================================"
-                    echo "Building Docker image (docker compose)"
+                    echo "Building Docker images"
                     echo "Image: ${FULL_IMAGE_NAME}"
                     echo "======================================"
 
-                    export IMAGE_TAG DOCKERHUB_REPO
                     export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
-                    echo "Services found in ${COMPOSE_FILE_NAME}:"
-                    docker compose -f "${COMPOSE_FILE_NAME}" config --services
+                    docker build \
+                        --platform linux/amd64 \
+                        --pull \
+                        --file "${APP_DOCKERFILE}" \
+                        --tag "${FULL_IMAGE_NAME}" \
+                        .
 
-                    docker compose \
-                        -f "${COMPOSE_FILE_NAME}" \
-                        build --pull "${WEB_SERVICE}"
+                    if [ -f "${NGINX_DOCKERFILE}" ]; then
+                        docker build \
+                            --platform linux/amd64 \
+                            --pull \
+                            --file "${NGINX_DOCKERFILE}" \
+                            --tag "${NGINX_IMAGE_NAME}" \
+                            .
+                    else
+                        echo "WARNING: ${NGINX_DOCKERFILE} not found, nginx image not built."
+                    fi
 
                     docker image inspect \
                         "${FULL_IMAGE_NAME}" \
@@ -233,17 +248,30 @@ pipeline {
                             --username "${DH_USER}" \
                             --password-stdin
 
-                        # Build the image if it does not exist locally yet
+                        # Build the images if they do not exist locally yet
                         if ! docker image inspect "${FULL_IMAGE_NAME}" >/dev/null 2>&1
                         then
                             echo "Image not found locally, building..."
 
-                            export IMAGE_TAG DOCKERHUB_REPO
                             export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
-                            docker compose \
-                                -f "${COMPOSE_FILE_NAME}" \
-                                build --pull "${WEB_SERVICE}"
+                            docker build \
+                                --platform linux/amd64 \
+                                --pull \
+                                --file "${APP_DOCKERFILE}" \
+                                --tag "${FULL_IMAGE_NAME}" \
+                                .
+
+                            if [ -f "${NGINX_DOCKERFILE}" ]; then
+                                docker build \
+                                    --platform linux/amd64 \
+                                    --pull \
+                                    --file "${NGINX_DOCKERFILE}" \
+                                    --tag "${NGINX_IMAGE_NAME}" \
+                                    .
+                            else
+                                echo "WARNING: ${NGINX_DOCKERFILE} not found, nginx image not built."
+                            fi
                         fi
 
                         echo "======================================"
@@ -252,6 +280,12 @@ pipeline {
                         echo "======================================"
 
                         docker push "${FULL_IMAGE_NAME}"
+
+                        if docker image inspect "${NGINX_IMAGE_NAME}" >/dev/null 2>&1
+                        then
+                            docker push "${NGINX_IMAGE_NAME}"
+                            docker manifest inspect "${NGINX_IMAGE_NAME}" >/dev/null
+                        fi
 
                         echo "======================================"
                         echo "Verifying image on Docker Hub"

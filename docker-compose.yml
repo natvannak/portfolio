@@ -1,52 +1,71 @@
+# Docker Swarm stack file (used by Jenkins: docker stack deploy)
+# Keep docker-compose.yml for local development.
 services:
   app:
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-    working_dir: /var/www/html
-    volumes:
-      - ./:/var/www/html
-    depends_on:
-      db:
-        condition: service_healthy
+    image: ${DOCKERHUB_REPO}:${IMAGE_TAG}
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: portfoliodb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: ${DB_PASSWORD}
     networks:
       - portfolio_network
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
 
   nginx:
-    image: portfolio-nginx:latest
+    image: ${DOCKERHUB_REPO}:nginx-${IMAGE_TAG}
     ports:
-      - "8000:80"
-    depends_on:
-      - app
+      - "80:80"
     networks:
       - portfolio_network
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
 
   db:
     image: mysql:8.4
-    restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${DB_DATABASE:-portfoliodb}
-      MYSQL_USER: ${DB_USERNAME:-portfolio}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-change_me}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_root_me}
-    ports:
-      - "127.0.0.1:3307:3306"
+      MYSQL_DATABASE: portfoliodb
+      MYSQL_USER: portfolio
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - portfolio_network
     healthcheck:
-      test:
-        - CMD-SHELL
-        - mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
-    networks:
-      - portfolio_network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
 
 networks:
   portfolio_network:
-    driver: bridge
+    driver: overlay
 
 volumes:
   mysql_data:
