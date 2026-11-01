@@ -42,10 +42,12 @@ pipeline {
         MANAGER_HOST          = '3.209.10.87'
         MANAGER_USER          = 'ubuntu'
 
-        STACK_NAME            = 'portfolio'
-        SERVICE_NAME          = 'portfolio_web'
+        // Stack name + service name inside docker-compose.yml  =>  homework3_web
+        STACK_NAME            = 'homework3'
+        SERVICE_NAME          = 'homework3_web'
         COMPOSE_FILE_NAME     = 'docker-compose.yml'
-        REMOTE_DIR            = '/home/ubuntu/portfolio'
+        WEB_SERVICE           = 'web'      // must match the web service name in docker-compose.yml
+        REMOTE_DIR            = '/home/ubuntu/homework3'
 
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'      // Username with password (use Access Token)
         SSH_CREDENTIALS       = 'swarm-ssh-key'              // SSH Username with private key
@@ -189,9 +191,12 @@ pipeline {
                     export IMAGE_TAG DOCKERHUB_REPO
                     export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
+                    echo "Services found in ${COMPOSE_FILE_NAME}:"
+                    docker compose -f "${COMPOSE_FILE_NAME}" config --services
+
                     docker compose \
                         -f "${COMPOSE_FILE_NAME}" \
-                        build --pull web
+                        build --pull "${WEB_SERVICE}"
 
                     docker image inspect \
                         "${FULL_IMAGE_NAME}" \
@@ -238,7 +243,7 @@ pipeline {
 
                             docker compose \
                                 -f "${COMPOSE_FILE_NAME}" \
-                                build --pull web
+                                build --pull "${WEB_SERVICE}"
                         fi
 
                         echo "======================================"
@@ -541,7 +546,6 @@ REMOTE_SCRIPT
         always {
             sh '''
                 rm -f "$WORKSPACE/deploy.env" 2>/dev/null || true
-                docker logout >/dev/null 2>&1 || true
             '''
 
             cleanWs(
