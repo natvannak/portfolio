@@ -42,14 +42,13 @@ pipeline {
         MANAGER_HOST          = '3.209.10.87'
         MANAGER_USER          = 'ubuntu'
 
-        // Stack name + service name inside docker-compose.swarm.yml  =>  homework3_app
-        STACK_NAME            = 'homework3'
-        SERVICE_NAME          = 'homework3_app'
-        COMPOSE_FILE_NAME     = 'docker-compose.swarm.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
+        STACK_NAME            = 'portfolio'
+        SERVICE_NAME          = 'portfolio_web'
+        COMPOSE_FILE_NAME     = 'docker-compose.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
 
         APP_DOCKERFILE        = 'docker/php/Dockerfile'      // Laravel (php-fpm) image => natvannak/portfolio:<tag>
         NGINX_DOCKERFILE      = 'docker/nginx/Dockerfile'    // nginx image => natvannak/portfolio:nginx-<tag> (skipped if file not found)
-        REMOTE_DIR            = '/home/ubuntu/homework3'
+        REMOTE_DIR            = '/home/ubuntu/portfolio'  // remote directory on Swarm manager where docker-compose.yml is copied
 
         DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'      // Username with password (use Access Token)
         SSH_CREDENTIALS       = 'swarm-ssh-key'              // SSH Username with private key
