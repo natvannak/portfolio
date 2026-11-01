@@ -5,7 +5,6 @@ pipeline {
         timestamps()
         disableConcurrentBuilds()
         skipDefaultCheckout(true)
-
         buildDiscarder(
             logRotator(
                 numToKeepStr: '20',
@@ -22,15 +21,14 @@ pipeline {
                 'push',
                 'deploy',
                 'rollback'
-            ],
-            description: 'Select pipeline action'
+            ]
         )
 
         gitParameter(
             name: 'VERSION',
             type: 'PT_TAG',
             defaultValue: '',
-            description: 'Select Git tag, for example v1.6.0',
+            description: 'Select Git tag, for example v1.0.1',
             tagFilter: '*',
             sortMode: 'DESCENDING_SMART',
             selectedValue: 'TOP',
@@ -39,30 +37,24 @@ pipeline {
     }
 
     environment {
-        GITHUB_REPO = 'https://github.com/natvannak/portfolio.git'
-
         DOCKERHUB_REPO = 'natvannak/portfolio'
 
         MANAGER_HOST = '3.209.10.87'
         MANAGER_USER = 'ubuntu'
 
-        STACK_NAME = 'portfolio'
-
-        APP_SERVICE = 'portfolio_app'
-        NGINX_SERVICE = 'portfolio_nginx'
-        DB_SERVICE = 'portfolio_db'
-
+        STACK_NAME        = 'portfolio'
+        SERVICE_NAME      = 'portfolio_app'
         COMPOSE_FILE_NAME = 'docker-compose.yml'
 
-        APP_DOCKERFILE = 'docker/php/Dockerfile'
+        APP_DOCKERFILE   = 'docker/php/Dockerfile'
         NGINX_DOCKERFILE = 'docker/nginx/Dockerfile'
 
         REMOTE_DIR = '/home/ubuntu/portfolio'
 
         DOCKERHUB_CREDENTIALS = 'docker-hub-id'
-        SSH_CREDENTIALS = 'portfolio-swarm-key'
+        SSH_CREDENTIALS       = 'portfolio-swarm-key'
 
-        DB_PASSWORD_CRED = 'portfolio-db-password'
+        DB_PASSWORD_CRED      = 'portfolio-db-password'
         DB_ROOT_PASSWORD_CRED = 'portfolio-db-root-password'
 
         PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
@@ -71,15 +63,10 @@ pipeline {
 
     stages {
 
-        /*
-         * ============================================
-         * 1. Validate Parameters
-         * ============================================
-         */
         stage('Validate Parameters') {
             steps {
                 script {
-                    def action = params.ACTION?.trim()
+                    def action  = params.ACTION?.trim()
                     def version = params.VERSION?.trim()
 
                     echo '======================================'
@@ -92,7 +79,6 @@ pipeline {
                     }
 
                     if (action in ['build', 'push', 'deploy', 'rollback']) {
-
                         if (!version) {
                             error(
                                 'VERSION is required. ' +
@@ -113,141 +99,61 @@ pipeline {
                             error('MANAGER_HOST is not configured.')
                         }
 
-                        if (!env.MANAGER_USER?.trim()) {
-                            error('MANAGER_USER is not configured.')
+                        if (!env.STACK_NAME?.trim() || !env.SERVICE_NAME?.trim()) {
+                            error('STACK_NAME / SERVICE_NAME is not configured.')
                         }
                     }
+
+                    env.IMAGE_TAG       = version ?: ''
+                    env.FULL_IMAGE_NAME = version
+                        ? "${env.DOCKERHUB_REPO}:${version}"
+                        : ''
+                    env.NGINX_IMAGE_NAME = version
+                        ? "${env.DOCKERHUB_REPO}:nginx-${version}"
+                        : ''
+
+                    echo "IMAGE TAG : ${env.IMAGE_TAG ?: '(not required)'}"
+                    echo "IMAGE     : ${env.FULL_IMAGE_NAME ?: '(not required)'}"
                 }
             }
         }
 
-
-        /*
-         * ============================================
-         * 2. Prepare Workspace
-         * ============================================
-         */
-        stage('Prepare Workspace') {
+        stage('Checkout Selected Version') {
             steps {
-                deleteDir()
-
-                echo '======================================'
-                echo 'Preparing workspace'
-                echo '======================================'
-            }
-        }
-
-
-        /*
-         * ============================================
-         * 3. Checkout Selected Git Tag
-         * ============================================
-         */
-        stage('Checkout Git Tag') {
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-
-                    branches: [[
-                        name: "refs/tags/${params.VERSION}"
-                    ]],
-
-                    userRemoteConfigs: [[
-                        url: "${GITHUB_REPO}",
-                        refspec: '+refs/tags/*:refs/tags/*'
-                    ]]
-                ])
+                checkout scm
 
                 sh '''
                     set -eu
 
-                    echo "======================================"
-                    echo "Git Information"
-                    echo "======================================"
+                    echo "Fetching Git tags..."
+                    git fetch --tags --force origin
 
-                    echo "Requested tag : ${VERSION}"
+                    echo "Checking selected tag: ${IMAGE_TAG}"
 
-                    git rev-parse HEAD
-
-                    CHECKED_TAG="$(git describe --tags --exact-match)"
-
-                    echo "Checked tag   : ${CHECKED_TAG}"
-
-                    if [ "${CHECKED_TAG}" != "${VERSION}" ]; then
-                        echo "ERROR: Checked-out tag does not match VERSION."
-                        exit 1
-                    fi
-                '''
-            }
-        }
-
-
-        /*
-         * ============================================
-         * 4. Validate Deployment Files
-         * ============================================
-         */
-        stage('Validate Deployment Files') {
-            steps {
-                sh '''
-                    set -eu
-
-                    echo "======================================"
-                    echo "Validating deployment files"
-                    echo "======================================"
-
-                    if [ ! -f "${APP_DOCKERFILE}" ]; then
-                        echo "ERROR: ${APP_DOCKERFILE} not found."
+                    if ! git rev-parse -q --verify \
+                        "refs/tags/${IMAGE_TAG}^{commit}" >/dev/null
+                    then
+                        echo "ERROR: Git tag '${IMAGE_TAG}' does not exist."
                         exit 1
                     fi
 
-                    if [ ! -f "${NGINX_DOCKERFILE}" ]; then
-                        echo "ERROR: ${NGINX_DOCKERFILE} not found."
-                        exit 1
-                    fi
+                    echo "Checking out Git tag: ${IMAGE_TAG}"
+                    git checkout --force "refs/tags/${IMAGE_TAG}"
 
                     if [ ! -f "${COMPOSE_FILE_NAME}" ]; then
-                        echo "ERROR: ${COMPOSE_FILE_NAME} not found."
+                        echo "ERROR: ${COMPOSE_FILE_NAME} not found in tag ${IMAGE_TAG}."
                         exit 1
                     fi
 
-                    command -v docker >/dev/null 2>&1 || {
-                        echo "ERROR: docker command not found."
-                        exit 1
-                    }
-
-                    command -v ssh >/dev/null 2>&1 || {
-                        echo "ERROR: ssh command not found."
-                        exit 1
-                    }
-
-                    command -v scp >/dev/null 2>&1 || {
-                        echo "ERROR: scp command not found."
-                        exit 1
-                    }
-
-                    echo "Validation successful."
+                    echo "Tag : ${IMAGE_TAG}"
                 '''
             }
         }
 
-
-        /*
-         * ============================================
-         * 5. Build Images
-         * ============================================
-         */
-        stage('Build Docker Images') {
-
+        stage('Check Required Commands') {
             when {
-                anyOf {
-                    expression {
-                        params.ACTION == 'build'
-                    }
-
-                    expression {
-                        params.ACTION == 'push'
-                    }
+                expression {
+                    params.ACTION in ['build', 'push']
                 }
             }
 
@@ -255,41 +161,69 @@ pipeline {
                 sh '''
                     set -eu
 
-                    APP_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
-                    NGINX_IMAGE="${DOCKERHUB_REPO}:nginx-${VERSION}"
+                    echo "Checking required commands..."
 
-                    echo "======================================"
-                    echo "Building Docker Images"
-                    echo "======================================"
+                    command -v git >/dev/null 2>&1 || {
+                        echo "ERROR: git is not installed."
+                        exit 1
+                    }
 
-                    echo "App image   : ${APP_IMAGE}"
-                    echo "Nginx image : ${NGINX_IMAGE}"
+                    command -v docker >/dev/null 2>&1 || {
+                        echo "ERROR: docker is not installed."
+                        exit 1
+                    }
 
-                    docker build \
-                        -f "${APP_DOCKERFILE}" \
-                        -t "${APP_IMAGE}" \
-                        .
-
-                    docker build \
-                        -f "${NGINX_DOCKERFILE}" \
-                        -t "${NGINX_IMAGE}" \
-                        .
-
-                    echo "======================================"
-                    echo "Docker build completed"
-                    echo "======================================"
+                    docker version
+                    docker compose version
                 '''
             }
         }
 
+        stage('Build Docker Image') {
+            when {
+                expression {
+                    params.ACTION == 'build'
+                }
+            }
 
-        /*
-         * ============================================
-         * 6. Push Images
-         * ============================================
-         */
-        stage('Push Docker Images') {
+            steps {
+                sh '''
+                    set -eu
 
+                    echo "======================================"
+                    echo "Building Docker images"
+                    echo "Image: ${FULL_IMAGE_NAME}"
+                    echo "======================================"
+
+                    export DOCKER_DEFAULT_PLATFORM=linux/amd64
+
+                    docker build \
+                        --platform linux/amd64 \
+                        --pull \
+                        --file "${APP_DOCKERFILE}" \
+                        --tag "${FULL_IMAGE_NAME}" \
+                        .
+
+                    if [ -f "${NGINX_DOCKERFILE}" ]; then
+                        docker build \
+                            --platform linux/amd64 \
+                            --pull \
+                            --file "${NGINX_DOCKERFILE}" \
+                            --tag "${NGINX_IMAGE_NAME}" \
+                            .
+                    else
+                        echo "WARNING: ${NGINX_DOCKERFILE} not found, nginx image not built."
+                    fi
+
+                    docker image inspect \
+                        "${FULL_IMAGE_NAME}" \
+                        --format \
+                        'Image ID: {{.Id}} | Created: {{.Created}}'
+                '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
             when {
                 expression {
                     params.ACTION == 'push'
@@ -304,396 +238,371 @@ pipeline {
                         passwordVariable: 'DH_PASS'
                     )
                 ]) {
-
                     sh '''
                         set -eu
 
-                        APP_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
-                        NGINX_IMAGE="${DOCKERHUB_REPO}:nginx-${VERSION}"
-
                         echo "======================================"
-                        echo "Docker Hub Login"
+                        echo "Logging in to Docker Hub"
                         echo "======================================"
 
-                        printf '%s' "${DH_PASS}" |
-                            docker login \
+                        printf '%s' "${DH_PASS}" \
+                        | docker login \
                             --username "${DH_USER}" \
                             --password-stdin
 
+                        # Build the images if they do not exist locally yet
+                        if ! docker image inspect "${FULL_IMAGE_NAME}" >/dev/null 2>&1
+                        then
+                            echo "Image not found locally, building..."
+
+                            export DOCKER_DEFAULT_PLATFORM=linux/amd64
+
+                            docker build \
+                                --platform linux/amd64 \
+                                --pull \
+                                --file "${APP_DOCKERFILE}" \
+                                --tag "${FULL_IMAGE_NAME}" \
+                                .
+
+                            if [ -f "${NGINX_DOCKERFILE}" ]; then
+                                docker build \
+                                    --platform linux/amd64 \
+                                    --pull \
+                                    --file "${NGINX_DOCKERFILE}" \
+                                    --tag "${NGINX_IMAGE_NAME}" \
+                                    .
+                            else
+                                echo "WARNING: ${NGINX_DOCKERFILE} not found, nginx image not built."
+                            fi
+                        fi
+
                         echo "======================================"
-                        echo "Pushing application image"
+                        echo "Pushing Docker image"
+                        echo "Image: ${FULL_IMAGE_NAME}"
                         echo "======================================"
 
-                        docker push "${APP_IMAGE}"
+                        # Retry push (network to Docker Hub can time out)
+                        push_retry() {
+                            n=1
+                            until docker push "$1"; do
+                                if [ "$n" -ge 5 ]; then
+                                    echo "ERROR: push failed after $n attempts: $1"
+                                    return 1
+                                fi
+                                echo "Push failed (attempt $n). Retrying in 15s..."
+                                n=$((n + 1))
+                                sleep 15
+                            done
+                        }
+
+                        push_retry "${FULL_IMAGE_NAME}"
+
+                        if docker image inspect "${NGINX_IMAGE_NAME}" >/dev/null 2>&1
+                        then
+                            push_retry "${NGINX_IMAGE_NAME}"
+                            docker manifest inspect "${NGINX_IMAGE_NAME}" >/dev/null
+                        fi
 
                         echo "======================================"
-                        echo "Pushing nginx image"
+                        echo "Verifying image on Docker Hub"
                         echo "======================================"
 
-                        docker push "${NGINX_IMAGE}"
+                        docker manifest inspect "${FULL_IMAGE_NAME}" >/dev/null
 
-                        echo "======================================"
-                        echo "Push completed"
-                        echo "======================================"
+                        echo "Successfully pushed:"
+                        echo "${FULL_IMAGE_NAME}"
                     '''
                 }
             }
         }
 
-
-        /*
-         * ============================================
-         * 7. Deploy / Rollback Docker Swarm
-         * ============================================
-         */
-        stage('Deploy / Rollback Docker Swarm Stack') {
-
+        stage('Test SSH Connection') {
             when {
-                anyOf {
-                    expression {
-                        params.ACTION == 'deploy'
-                    }
+                expression {
+                    params.ACTION in ['deploy', 'rollback']
+                }
+            }
+            steps {
+                sshagent(["${SSH_CREDENTIALS}"]) {
+                    sh '''
+                        set -eu
 
-                    expression {
-                        params.ACTION == 'rollback'
-                    }
+                        echo "======================================"
+                        echo "Testing SSH connection"
+                        echo "Manager: ${MANAGER_USER}@${MANAGER_HOST}"
+                        echo "======================================"
+
+                        ssh \
+                            -o BatchMode=yes \
+                            -o ConnectTimeout=10 \
+                            -o StrictHostKeyChecking=no \
+                            -o UserKnownHostsFile=/dev/null \
+                            "${MANAGER_USER}@${MANAGER_HOST}" \
+                            '
+                                set -eu
+
+                                echo "Hostname: $(hostname)"
+                                echo "User    : $(whoami)"
+
+                                command -v docker >/dev/null 2>&1 || {
+                                    echo "ERROR: Docker is not installed."
+                                    exit 1
+                                }
+
+                                docker info >/dev/null
+
+                                echo "Docker connection successful."
+                            '
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy / Rollback Docker Swarm Stack') {
+            when {
+                expression {
+                    params.ACTION in ['deploy', 'rollback']
                 }
             }
 
             steps {
-
                 withCredentials([
-
                     usernamePassword(
                         credentialsId: "${DOCKERHUB_CREDENTIALS}",
                         usernameVariable: 'DH_USER',
                         passwordVariable: 'DH_PASS'
                     ),
-
                     string(
                         credentialsId: "${DB_PASSWORD_CRED}",
                         variable: 'DB_PASSWORD'
                     ),
-
                     string(
                         credentialsId: "${DB_ROOT_PASSWORD_CRED}",
                         variable: 'DB_ROOT_PASSWORD'
                     )
-
                 ]) {
-
-                    sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-
+                    sshagent(["${SSH_CREDENTIALS}"]) {
                         sh '''
                             set -eu
 
                             ENV_FILE="${WORKSPACE}/deploy.env"
+                            SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=15 \
+-o ServerAliveInterval=10 -o ServerAliveCountMax=6 \
+-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-                            SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-                            cleanup_local() {
+                            cleanup() {
                                 rm -f "${ENV_FILE}"
                             }
 
-                            trap cleanup_local EXIT INT TERM
-
-                            APP_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
-                            NGINX_IMAGE="${DOCKERHUB_REPO}:nginx-${VERSION}"
+                            trap cleanup EXIT INT TERM
 
                             echo "======================================"
-                            echo "Deployment Information"
+                            echo "${ACTION} information"
+                            echo "======================================"
+                            echo "Stack   : ${STACK_NAME}"
+                            echo "Service : ${SERVICE_NAME}"
+                            echo "Version : ${IMAGE_TAG}"
+                            echo "Image   : ${FULL_IMAGE_NAME}"
                             echo "======================================"
 
-                            echo "Action      : ${ACTION}"
-                            echo "Stack       : ${STACK_NAME}"
-                            echo "Version     : ${VERSION}"
-                            echo "App image   : ${APP_IMAGE}"
-                            echo "Nginx image : ${NGINX_IMAGE}"
-                            echo "Manager     : ${MANAGER_HOST}"
-
-                            echo "======================================"
-
-                            if [ "${ACTION}" = "rollback" ]; then
-
-                                echo "Starting rollback..."
-
-                                ssh ${SSH_OPTS} \
-                                    "${MANAGER_USER}@${MANAGER_HOST}" \
-                                    "
-                                    set -eu
-
-                                    echo 'Rolling back ${APP_SERVICE}...'
-
-                                    if docker service inspect '${APP_SERVICE}' >/dev/null 2>&1; then
-                                        docker service rollback '${APP_SERVICE}'
-                                    else
-                                        echo 'ERROR: ${APP_SERVICE} not found.'
-                                        exit 1
-                                    fi
-
-                                    echo 'Rolling back ${NGINX_SERVICE}...'
-
-                                    if docker service inspect '${NGINX_SERVICE}' >/dev/null 2>&1; then
-                                        docker service rollback '${NGINX_SERVICE}'
-                                    else
-                                        echo 'WARNING: ${NGINX_SERVICE} not found.'
-                                    fi
-
-                                    echo 'Rollback commands completed.'
-                                    "
-
-                                exit 0
-                            fi
-
-
-                            echo "Creating temporary deploy.env..."
-
+                            # Temporary env file (variables used by docker-compose.yml)
                             umask 077
+                            printf "IMAGE_TAG='%s'\\nDOCKERHUB_REPO='%s'\\nDB_PASSWORD='%s'\\nDB_ROOT_PASSWORD='%s'\\n" \
+                                "${IMAGE_TAG}" \
+                                "${DOCKERHUB_REPO}" \
+                                "${DB_PASSWORD}" \
+                                "${DB_ROOT_PASSWORD}" \
+                                > "${ENV_FILE}"
 
-                            {
-                                printf 'VERSION=%s\\n' "${VERSION}"
-                                printf 'DOCKERHUB_REPO=%s\\n' "${DOCKERHUB_REPO}"
-                                printf 'APP_IMAGE=%s\\n' "${APP_IMAGE}"
-                                printf 'NGINX_IMAGE=%s\\n' "${NGINX_IMAGE}"
-                                printf 'DB_PASSWORD=%s\\n' "${DB_PASSWORD}"
-                                printf 'DB_ROOT_PASSWORD=%s\\n' "${DB_ROOT_PASSWORD}"
-                            } > "${ENV_FILE}"
-
-
-                            echo "Checking SSH connection..."
-
-                            ssh ${SSH_OPTS} \
-                                "${MANAGER_USER}@${MANAGER_HOST}" \
-                                "echo 'SSH connection successful.'"
-
-
-                            echo "Creating remote deployment directory..."
+                            echo "Preparing remote directory..."
 
                             ssh ${SSH_OPTS} \
                                 "${MANAGER_USER}@${MANAGER_HOST}" \
                                 "mkdir -p '${REMOTE_DIR}'"
 
-
-                            echo "Uploading deployment files..."
+                            echo "Copying compose file and env file..."
 
                             scp ${SSH_OPTS} \
                                 "${COMPOSE_FILE_NAME}" \
+                                "${MANAGER_USER}@${MANAGER_HOST}:${REMOTE_DIR}/docker-compose.yml"
+
+                            scp ${SSH_OPTS} \
                                 "${ENV_FILE}" \
-                                "${MANAGER_USER}@${MANAGER_HOST}:${REMOTE_DIR}/"
+                                "${MANAGER_USER}@${MANAGER_HOST}:${REMOTE_DIR}/deploy.env"
 
+                            echo "Logging Docker into Docker Hub on manager..."
 
-                            echo "Logging Docker Swarm manager into registry..."
-
-                            printf '%s' "${DH_PASS}" |
-                                ssh ${SSH_OPTS} \
+                            printf '%s' "${DH_PASS}" \
+                            | ssh ${SSH_OPTS} \
                                 "${MANAGER_USER}@${MANAGER_HOST}" \
-                                "docker login \
-                                --username '${DH_USER}' \
-                                --password-stdin"
+                                "docker login --username '${DH_USER}' --password-stdin"
 
-
-                            echo "Deploying Docker Swarm stack..."
+                            echo "Deploying stack..."
 
                             ssh ${SSH_OPTS} \
                                 "${MANAGER_USER}@${MANAGER_HOST}" \
-                                "
-                                set -eu
+                                bash -s -- \
+                                "${STACK_NAME}" \
+                                "${SERVICE_NAME}" \
+                                "${FULL_IMAGE_NAME}" \
+                                "${REMOTE_DIR}" <<'REMOTE_SCRIPT'
+set -eu
 
-                                cd '${REMOTE_DIR}'
+STACK_NAME="$1"
+SERVICE_NAME="$2"
+FULL_IMAGE_NAME="$3"
+REMOTE_DIR="$4"
 
-                                set -a
-                                . ./deploy.env
-                                set +a
+cd "${REMOTE_DIR}"
 
-                                echo '======================================'
-                                echo 'Deploying stack'
-                                echo '======================================'
+cleanup_remote() {
+    rm -f "${REMOTE_DIR}/deploy.env"
+}
 
-                                echo \"Version: \\${VERSION}\"
-                                echo \"App    : \\${APP_IMAGE}\"
-                                echo \"Nginx  : \\${NGINX_IMAGE}\"
+trap cleanup_remote EXIT INT TERM
 
-                                docker stack deploy \
-                                    --with-registry-auth \
-                                    --prune \
-                                    -c '${COMPOSE_FILE_NAME}' \
-                                    '${STACK_NAME}'
+SWARM_CONTROL="$(docker info --format '{{.Swarm.ControlAvailable}}')"
 
-                                echo '======================================'
-                                echo 'Stack services'
-                                echo '======================================'
+if [ "${SWARM_CONTROL}" != "true" ]; then
+    echo "ERROR: This server is not a Swarm Manager."
+    exit 1
+fi
 
-                                docker stack services '${STACK_NAME}'
+echo "Checking image on Docker Hub: ${FULL_IMAGE_NAME}"
+docker manifest inspect "${FULL_IMAGE_NAME}" >/dev/null
 
-                                rm -f ./deploy.env
-                                "
+PREVIOUS_IMAGE="$(docker service inspect \
+    --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' \
+    "${SERVICE_NAME}" 2>/dev/null || echo '(none)')"
 
-                            echo "======================================"
-                            echo "Deployment command completed"
-                            echo "======================================"
+echo "Previous image: ${PREVIOUS_IMAGE}"
+echo "New image     : ${FULL_IMAGE_NAME}"
+
+# Load variables for docker-compose.yml
+set -a
+. "${REMOTE_DIR}/deploy.env"
+set +a
+
+docker stack deploy \
+    --compose-file "${REMOTE_DIR}/docker-compose.yml" \
+    --with-registry-auth \
+    --resolve-image always \
+    --prune \
+    --detach=false \
+    "${STACK_NAME}"
+
+UPDATED_IMAGE="$(docker service inspect \
+    --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' \
+    "${SERVICE_NAME}")"
+
+echo "======================================"
+echo "Result"
+echo "======================================"
+echo "Expected: ${FULL_IMAGE_NAME}"
+echo "Current : ${UPDATED_IMAGE}"
+
+case "${UPDATED_IMAGE}" in
+    "${FULL_IMAGE_NAME}"|"${FULL_IMAGE_NAME}@sha256:"*)
+        echo "Stack deployment completed successfully."
+        ;;
+    *)
+        echo "ERROR: Image verification failed."
+        docker service ps --no-trunc "${SERVICE_NAME}"
+        exit 1
+        ;;
+esac
+REMOTE_SCRIPT
                         '''
                     }
                 }
             }
         }
 
-
-        /*
-         * ============================================
-         * 8. Verify Deployment
-         * ============================================
-         */
         stage('Verify Deployment') {
-
             when {
-                anyOf {
-                    expression {
-                        params.ACTION == 'deploy'
-                    }
-
-                    expression {
-                        params.ACTION == 'rollback'
-                    }
+                expression {
+                    params.ACTION in ['deploy', 'rollback']
                 }
             }
 
             steps {
-
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-
+                sshagent(["${SSH_CREDENTIALS}"]) {
                     sh '''
                         set -eu
 
-                        SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-                        echo "======================================"
-                        echo "Docker Swarm Nodes"
-                        echo "======================================"
-
-                        ssh ${SSH_OPTS} \
+                        ssh \
+                            -o BatchMode=yes \
+                            -o ConnectTimeout=10 \
+                            -o StrictHostKeyChecking=no \
+                            -o UserKnownHostsFile=/dev/null \
                             "${MANAGER_USER}@${MANAGER_HOST}" \
-                            "docker node ls"
+                            bash -s -- "${STACK_NAME}" "${SERVICE_NAME}" <<'REMOTE_SCRIPT'
+set -eu
 
-                        echo "======================================"
-                        echo "Stack Services"
-                        echo "======================================"
+STACK_NAME="$1"
+SERVICE_NAME="$2"
 
-                        ssh ${SSH_OPTS} \
-                            "${MANAGER_USER}@${MANAGER_HOST}" \
-                            "docker stack services '${STACK_NAME}'"
+echo "======================================"
+echo "Stack Services (web, db)"
+echo "======================================"
+docker stack services "${STACK_NAME}"
 
-                        echo "======================================"
-                        echo "Stack Tasks"
-                        echo "======================================"
+echo "======================================"
+echo "Current Web Image"
+echo "======================================"
+docker service inspect \
+    --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' \
+    "${SERVICE_NAME}"
 
-                        ssh ${SSH_OPTS} \
-                            "${MANAGER_USER}@${MANAGER_HOST}" \
-                            "docker stack ps '${STACK_NAME}' --no-trunc"
-                    '''
-                }
-            }
-        }
+echo "======================================"
+echo "Web Update Status"
+echo "======================================"
+docker service inspect \
+    --format '{{json .UpdateStatus}}' \
+    "${SERVICE_NAME}"
 
-
-        /*
-         * ============================================
-         * 9. Safe Docker Cleanup
-         * ============================================
-         */
-        stage('Safe Docker Cleanup') {
-
-            when {
-                anyOf {
-                    expression {
-                        params.ACTION == 'deploy'
-                    }
-
-                    expression {
-                        params.ACTION == 'rollback'
-                    }
-                }
-            }
-
-            steps {
-
-                sshagent(credentials: ["${SSH_CREDENTIALS}"]) {
-
-                    sh '''
-                        set -eu
-
-                        SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-                        echo "======================================"
-                        echo "Safe Docker Cleanup"
-                        echo "======================================"
-
-                        ssh ${SSH_OPTS} \
-                            "${MANAGER_USER}@${MANAGER_HOST}" \
-                            "
-                            set -eu
-
-                            echo 'Disk usage before cleanup:'
-                            docker system df || true
-
-                            echo 'Removing dangling images only...'
-
-                            docker image prune -f || true
-
-                            echo 'Removing stopped containers...'
-
-                            docker container prune -f || true
-
-                            echo 'Removing unused build cache...'
-
-                            docker builder prune -f || true
-
-                            echo 'Disk usage after cleanup:'
-                            docker system df || true
-
-                            echo 'Cleanup completed.'
-                            "
+echo "======================================"
+echo "Stack Tasks"
+echo "======================================"
+docker stack ps --no-trunc "${STACK_NAME}"
+REMOTE_SCRIPT
                     '''
                 }
             }
         }
     }
 
-
-    /*
-     * ============================================
-     * Post Actions
-     * ============================================
-     */
     post {
-
         success {
             echo '======================================'
             echo 'Pipeline completed successfully.'
             echo "ACTION : ${params.ACTION}"
-            echo "VERSION: ${params.VERSION}"
+            echo "VERSION: ${params.VERSION ?: '(not required)'}"
             echo '======================================'
         }
 
         failure {
             echo '======================================'
             echo 'Pipeline failed.'
-            echo "ACTION : ${params.ACTION}"
-            echo "VERSION: ${params.VERSION}"
             echo 'Check the failed stage logs above.'
             echo '======================================'
         }
 
+        aborted {
+            echo 'Pipeline was aborted.'
+        }
+
         always {
-
             sh '''
-                set +e
-
-                rm -f "${WORKSPACE}/deploy.env"
-
-                exit 0
+                rm -f "$WORKSPACE/deploy.env" 2>/dev/null || true
             '''
 
-            cleanWs()
+            cleanWs(
+                cleanWhenNotBuilt: false,
+                deleteDirs: true,
+                disableDeferredWipeout: false,
+                notFailBuild: true
+            )
         }
     }
 }
