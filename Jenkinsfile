@@ -53,6 +53,9 @@ pipeline {
         DOCKERHUB_CREDENTIALS = 'docker-hub-id'      // Username with password (use Access Token)
         SSH_CREDENTIALS       = 'portfolio-swarm-key'              // SSH Username with private key
 
+        DB_PASSWORD_CRED      = 'change_me'        // Secret text
+        DB_ROOT_PASSWORD_CRED = 'change_root_me'   // Secret text
+ 
         PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
     }
 
