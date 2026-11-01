@@ -319,7 +319,6 @@ pipeline {
                     params.ACTION in ['deploy', 'rollback']
                 }
             }
-
             steps {
                 sshagent(["${SSH_CREDENTIALS}"]) {
                     sh '''
