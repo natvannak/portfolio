@@ -37,27 +37,29 @@ pipeline {
     }
 
     environment {
-        DOCKERHUB_REPO        = 'natvannak/portfolio'
+        DOCKERHUB_REPO = 'natvannak/portfolio'
 
-        MANAGER_HOST          = '3.209.10.87'
-        MANAGER_USER          = 'ubuntu'
+        MANAGER_HOST = '3.209.10.87'
+        MANAGER_USER = 'ubuntu'
 
-        STACK_NAME            = 'portfolio'
-        SERVICE_NAME          = 'portfolio_web'
-        COMPOSE_FILE_NAME     = 'docker-compose.yml'   // stack file used for deploy (dev file docker-compose.yml is untouched)
+        STACK_NAME        = 'portfolio'
+        SERVICE_NAME      = 'portfolio_app'
+        COMPOSE_FILE_NAME = 'docker-compose.yml'
 
-        APP_DOCKERFILE        = 'docker/php/Dockerfile'      // Laravel (php-fpm) image => natvannak/portfolio:<tag>
-        NGINX_DOCKERFILE      = 'docker/nginx/Dockerfile'    // nginx image => natvannak/portfolio:nginx-<tag> (skipped if file not found)
-        REMOTE_DIR            = '/home/ubuntu/portfolio'  // remote directory on Swarm manager where docker-compose.yml is copied
+        APP_DOCKERFILE   = 'docker/php/Dockerfile'
+        NGINX_DOCKERFILE = 'docker/nginx/Dockerfile'
 
-        DOCKERHUB_CREDENTIALS = 'docker-hub-id'      // Username with password (use Access Token)
-        SSH_CREDENTIALS       = 'portfolio-swarm-key'              // SSH Username with private key
+        REMOTE_DIR = '/home/ubuntu/portfolio'
 
-        DB_PASSWORD_CRED      = 'change_me'        // Secret text
-        DB_ROOT_PASSWORD_CRED = 'change_root_me'   // Secret text
- 
+        DOCKERHUB_CREDENTIALS = 'docker-hub-id'
+        SSH_CREDENTIALS       = 'portfolio-swarm-key'
+
+        DB_PASSWORD_CRED      = 'portfolio-db-password'
+        DB_ROOT_PASSWORD_CRED = 'portfolio-db-root-password'
+
         PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
     }
+
 
     stages {
 
