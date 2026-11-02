@@ -57,7 +57,7 @@
 
     <footer>
         <div class="container footer-inner">
-            <span>© <span id="year">{{ date('Y') }}</span> {{ config('app.name') }} Version 1.0.1</span>
+            <span>© <span id="year">{{ date('Y') }}</span> {{ config('app.name') }} Version 1.0.0</span>
         </div>
     </footer>
     <script src="{{ asset('js/script.js') }}"></script>
