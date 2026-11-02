@@ -574,7 +574,7 @@ REMOTE_SCRIPT
                 }
             }
         }
-    }
+    
     stage('Telegram Notification') {
         when {
             expression {
@@ -625,6 +625,8 @@ REMOTE_SCRIPT
             }
         }
     }
+    }
+    
     post {
         success {
             echo '======================================'
