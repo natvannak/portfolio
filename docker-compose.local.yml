@@ -1,0 +1,110 @@
+services:
+
+  # ==========================================
+  # Laravel Application
+  # ==========================================
+  app:
+    image: ${DOCKERHUB_REPO}:${IMAGE_TAG}
+
+    environment:
+      APP_NAME: Portfolio
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: ${APP_URL:-http://localhost}
+
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: debug
+
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: portfoliodb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+
+    secrets:
+      - app_key
+
+    command:
+      - sh
+      - -c
+      - |
+        export APP_KEY="$$(cat /run/secrets/app_key)"
+        sed -i 's/^;clear_env = no/clear_env = no/' /usr/local/etc/php-fpm.d/www.conf
+        exec php-fpm -F
+
+    networks:
+      - portfolio_network
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ==========================================
+  # Nginx
+  # ==========================================
+  nginx:
+    image: ${DOCKERHUB_REPO}:nginx-${IMAGE_TAG}
+
+    ports:
+      - "80:80"
+
+    networks:
+      - portfolio_network
+
+    depends_on:
+      - app
+
+  # ==========================================
+  # MySQL
+  # ==========================================
+  db:
+    image: mysql:8.4
+
+    environment:
+      MYSQL_DATABASE: portfoliodb
+      MYSQL_USER: portfolio
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+
+    volumes:
+      - portfolio_db_data:/var/lib/mysql
+
+    networks:
+      - portfolio_network
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+
+# ==========================================
+# NETWORK
+# ==========================================
+networks:
+  portfolio_network:
+    driver: bridge
+
+
+# ==========================================
+# VOLUME
+# ==========================================
+volumes:
+  portfolio_db_data:
+
+
+# ==========================================
+# LOCAL SECRET
+# ==========================================
+secrets:
+  app_key:
+    file: ./secrets/app_key.txt

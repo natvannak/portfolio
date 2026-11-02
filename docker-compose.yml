@@ -1,16 +1,77 @@
+version: "3.8"
+
 services:
 
+  # ==========================================
+  # Laravel Application (PHP-FPM)
+  # ==========================================
   app:
-    image: ${APP_IMAGE}
+    image: ${DOCKERHUB_REPO}:${IMAGE_TAG}
+
+    environment:
+      APP_NAME: Portfolio
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${APP_URL:-http://54.145.242.74}
+
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: error
+
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_DATABASE: portfoliodb
+      DB_USERNAME: portfolio
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+
+    secrets:
+      - app_key
+
+    command:
+      - sh
+      - -c
+      - |
+        export APP_KEY="$$(cat /run/secrets/app_key)"
+        sed -i 's/^;clear_env = no/clear_env = no/' /usr/local/etc/php-fpm.d/www.conf
+        exec php-fpm -F
+
     networks:
-      - portfolio_network
+      portfolio_network:
+        aliases:
+          - app
+
     deploy:
-      replicas: 1
+      replicas: 3
+
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 5
 
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+
+      placement:
+        preferences:
+          - spread: node.id
+
+  # ==========================================
+  # Nginx Web Server
+  # ==========================================
   nginx:
-    image: ${NGINX_IMAGE}
+    image: ${DOCKERHUB_REPO}:nginx-${IMAGE_TAG}
 
     ports:
       - target: 80
@@ -21,38 +82,86 @@ services:
     networks:
       - portfolio_network
 
-    depends_on:
-      - app
-
     deploy:
-      replicas: 1
+      replicas: 3
+
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 5
 
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+
+  # ==========================================
+  # MySQL Database
+  # ==========================================
   db:
     image: mysql:8.4
 
     environment:
-      MYSQL_DATABASE: portfolio
+      MYSQL_DATABASE: portfoliodb
       MYSQL_USER: portfolio
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
 
     volumes:
-      - mysql_data:/var/lib/mysql
+      - portfolio_db_data:/var/lib/mysql
 
     networks:
-      - portfolio_network
+      portfolio_network:
+        aliases:
+          - db
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
     deploy:
       replicas: 1
+
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+
       placement:
         constraints:
           - node.role == manager
 
+
+# ==========================================
+# NETWORKS
+# ==========================================
 networks:
   portfolio_network:
     driver: overlay
 
+
+# ==========================================
+# VOLUMES
+# ==========================================
 volumes:
-  mysql_data:
+  portfolio_db_data:
+    driver: local
+
+
+# ==========================================
+# DOCKER SECRETS
+# ==========================================
+secrets:
+  app_key:
+    external: true
