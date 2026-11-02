@@ -57,6 +57,10 @@ pipeline {
         DB_PASSWORD_CRED      = 'portfolio-db-password'
         DB_ROOT_PASSWORD_CRED = 'portfolio-db-root-password'
 
+        // Telegram
+        TELEGRAM_BOT_CRED  = 'telegram-bot-token'
+        TELEGRAM_CHAT_CRED = 'telegram-chat-id'
+        
         PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin'
     }
 
@@ -571,7 +575,56 @@ REMOTE_SCRIPT
             }
         }
     }
+    stage('Telegram Notification') {
+        when {
+            expression {
+                params.ACTION in ['deploy', 'rollback']
+            }
+        }
 
+        steps {
+            withCredentials([
+                string(
+                    credentialsId: "${TELEGRAM_BOT_CRED}",
+                    variable: 'TG_BOT_TOKEN'
+                ),
+                string(
+                    credentialsId: "${TELEGRAM_CHAT_CRED}",
+                    variable: 'TG_CHAT_ID'
+                )
+            ]) {
+                sh '''
+                    set -eu
+
+                    echo "======================================"
+                    echo "Sending Telegram notification"
+                    echo "======================================"
+
+                    MESSAGE="✅ Deployment Successful
+
+    🚀 Project: Portfolio
+    ⚙️ Action: ${ACTION}
+    🏷 Version: ${IMAGE_TAG}
+    🐳 Image: ${FULL_IMAGE_NAME}
+    📦 Stack: ${STACK_NAME}
+    🌐 Server: ${MANAGER_HOST}
+    🔨 Jenkins Job: ${JOB_NAME}
+    #️⃣ Build: ${BUILD_NUMBER}
+
+    ✅ Docker Swarm deployment completed successfully."
+
+                    curl --fail --silent --show-error \
+                        --request POST \
+                        --data-urlencode "chat_id=${TG_CHAT_ID}" \
+                        --data-urlencode "text=${MESSAGE}" \
+                        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage"
+
+                    echo ""
+                    echo "Telegram notification sent successfully."
+                '''
+            }
+        }
+    }
     post {
         success {
             echo '======================================'
